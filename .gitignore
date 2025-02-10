@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+venv/
+.env
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cursor specific
+.cursor/
+.cursor-log/
