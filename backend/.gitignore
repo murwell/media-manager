@@ -1,7 +1,0 @@
-# OpenCV model files
-app/models/
-app/models/*.caffemodel
-app/models/*.prototxt
-
-# Uploads directory
-uploads/ 
