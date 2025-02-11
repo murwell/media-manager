@@ -31,4 +31,18 @@ venv/
 # Other
 *.sqlite3
 
+# Uploads - keep directory structure but ignore contents
+uploads/*
+!uploads/.gitkeep
+uploads/images/*
+!uploads/images/.gitkeep
+uploads/videos/*
+!uploads/videos/.gitkeep
+uploads/documents/*
+!uploads/documents/.gitkeep
+uploads/audio/*
+!uploads/audio/.gitkeep
+uploads/other/*
+!uploads/other/.gitkeep
+
 

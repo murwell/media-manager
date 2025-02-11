@@ -13,5 +13,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the entire backend directory
 COPY . /code/
 
-# Command to run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"] 
+# Run migrations and start the application
+CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload 
