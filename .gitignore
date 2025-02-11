@@ -12,3 +12,23 @@ venv/
 # Cursor specific
 .cursor/
 .cursor-log/
+
+# Environment variables
+.env        
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Python environment
+venv/
+
+# Other
+*.sqlite3
+
+
