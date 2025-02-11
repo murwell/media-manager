@@ -7,14 +7,17 @@ import os
 class OpenCVService:
     def __init__(self):
         # Use DNN face detector instead of cascade classifier
-        model_file = "backend/app/models/res10_300x300_ssd_iter_140000.caffemodel"
-        config_file = "backend/app/models/deploy.prototxt"
+        models_dir = os.path.expanduser("~/.opencv_models")
+        os.makedirs(models_dir, exist_ok=True)
+        
+        self.model_file = os.path.join(models_dir, "res10_300x300_ssd_iter_140000.caffemodel")
+        self.config_file = os.path.join(models_dir, "deploy.prototxt")
         
         # Download models if they don't exist
         self._ensure_models_exist()
         
         # Load DNN model
-        self.face_detector = cv2.dnn.readNet(model_file, config_file)
+        self.face_detector = cv2.dnn.readNet(self.model_file, self.config_file)
         
         # Use OpenCL if available
         if cv2.ocl.haveOpenCL():
@@ -26,8 +29,7 @@ class OpenCVService:
 
     def _ensure_models_exist(self):
         """Download required models if they don't exist."""
-        # Use user's home directory or local app directory
-        models_dir = os.path.expanduser("~/.opencv_models")  # or "./models"
+        models_dir = os.path.expanduser("~/.opencv_models")
         os.makedirs(models_dir, exist_ok=True)
         
         # Model files URLs
