@@ -17,6 +17,10 @@ RUN apt-get update && apt-get install -y \
 # Set the working directory in the container
 WORKDIR /code
 
+# Create and set permissions for uploads directory
+RUN mkdir -p /code/uploads && \
+    chmod -R 777 /code/uploads
+
 # Copy the requirements file into the container
 COPY requirements.txt .
 

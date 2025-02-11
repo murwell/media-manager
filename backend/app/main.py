@@ -1,5 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, Text, or_
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, Text, or_, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -70,6 +70,13 @@ class MediaAsset(Base):
     # Video/Audio specific
     duration = Column(Float, nullable=True)  # in seconds
     bitrate = Column(Integer, nullable=True)  # in bits per second
+    
+    # Add new columns for OpenCV analysis
+    faces_detected = Column(Integer, nullable=True)
+    dominant_colors = Column(Text, nullable=True)  # Store as JSON string
+    average_color = Column(String, nullable=True)  # Store as hex color
+    is_blurry = Column(Boolean, nullable=True)
+    brightness_score = Column(Float, nullable=True)
 
 # Create the database tables
 Base.metadata.create_all(bind=engine)
@@ -248,6 +255,63 @@ async def extract_original_metadata(file: UploadFile, content: bytes) -> dict:
     
     return metadata
 
+def analyze_image_opencv(image_path: str) -> dict:
+    """Analyze image using OpenCV and return metadata."""
+    try:
+        img = cv2.imread(image_path)
+        if img is None:
+            return {}
+            
+        analysis = {}
+        
+        # Basic image info
+        height, width = img.shape[:2]
+        analysis['height'] = int(height)  # Convert to native Python int
+        analysis['width'] = int(width)    # Convert to native Python int
+        
+        # Detect faces
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+        analysis['faces_detected'] = len(faces)
+        
+        # Get dominant colors
+        pixels = img.reshape(-1, 3)
+        pixels = np.float32(pixels)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 200, .1)
+        flags = cv2.KMEANS_RANDOM_CENTERS
+        _, labels, palette = cv2.kmeans(pixels, 5, None, criteria, 10, flags)
+        _, counts = np.unique(labels, return_counts=True)
+        
+        # Convert BGR to RGB and then to hex
+        dominant_colors = []
+        for color in palette:
+            rgb = color[::-1]  # Convert BGR to RGB
+            hex_color = '#{:02x}{:02x}{:02x}'.format(int(rgb[0]), int(rgb[1]), int(rgb[2]))
+            dominant_colors.append(hex_color)
+        analysis['dominant_colors'] = json.dumps(dominant_colors)
+        
+        # Calculate average color
+        average_color = img.mean(axis=0).mean(axis=0)
+        rgb_avg = average_color[::-1]  # Convert BGR to RGB
+        analysis['average_color'] = '#{:02x}{:02x}{:02x}'.format(
+            int(rgb_avg[0]), int(rgb_avg[1]), int(rgb_avg[2])
+        )
+        
+        # Check if image is blurry
+        laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+        analysis['is_blurry'] = bool(laplacian_var < 100)  # Convert to native Python bool
+        
+        # Calculate brightness score
+        brightness = np.mean(gray)
+        analysis['brightness_score'] = float(brightness)  # Convert to native Python float
+        
+        return analysis
+        
+    except Exception as e:
+        print(f"Error analyzing image with OpenCV: {e}")
+        return {}
+
 @app.post("/upload/")
 async def upload_file(
     file: UploadFile = File(...),
@@ -257,12 +321,15 @@ async def upload_file(
     try:
         # Read file content
         content = await file.read()
+        print(f"File received: {file.filename}, size: {len(content)} bytes")  # Debug log
         
         # Extract metadata before saving
         metadata = await extract_original_metadata(file, content)
+        print(f"Extracted metadata: {metadata}")  # Debug log
         
         # Determine the appropriate directory based on content type
         category = get_file_category(file.content_type)
+        print(f"Category: {category}")  # Debug log
         
         # Create a unique filename to avoid conflicts
         file_location = UPLOAD_DIR / category / file.filename
@@ -273,32 +340,61 @@ async def upload_file(
             new_filename = f"{stem}_{counter}{suffix}"
             file_location = UPLOAD_DIR / category / new_filename
             counter += 1
+        
+        print(f"File will be saved to: {file_location}")  # Debug log
+
+        # Ensure directory exists
+        file_location.parent.mkdir(parents=True, exist_ok=True)
 
         # Save the file
         with open(file_location, "wb") as buffer:
             buffer.write(content)
         
+        print("File saved successfully")  # Debug log
+        
+        # Extract OpenCV metadata for images
+        opencv_metadata = {}
+        if file.content_type.startswith('image/'):
+            print("Starting OpenCV analysis")  # Debug log
+            opencv_metadata = analyze_image_opencv(str(file_location))
+            print(f"OpenCV metadata: {opencv_metadata}")  # Debug log
+        
         # Save file details to the database
         db = SessionLocal()
-        media_asset = MediaAsset(
-            filename=file_location.name,
-            content_type=file.content_type,
-            file_path=str(file_location),
-            title=title or file_location.stem,
-            description=description,
-            file_size=metadata['file_size'],
-            file_created_date=metadata['file_created_date'],
-            file_modified_date=metadata['file_modified_date'],
-            original_creation_date=metadata['original_creation_date'],
-            width=metadata.get('width'),
-            height=metadata.get('height'),
-            duration=metadata.get('duration'),
-            bitrate=metadata.get('bitrate')
-        )
-        db.add(media_asset)
-        db.commit()
-        db.refresh(media_asset)
-        db.close()
+        try:
+            media_asset = MediaAsset(
+                filename=file_location.name,
+                content_type=file.content_type,
+                file_path=str(file_location),
+                title=title or file_location.stem,
+                description=description,
+                file_size=metadata['file_size'],
+                file_created_date=metadata['file_created_date'],
+                file_modified_date=metadata['file_modified_date'],
+                original_creation_date=metadata['original_creation_date'],
+                width=metadata.get('width'),
+                height=metadata.get('height'),
+                duration=metadata.get('duration'),
+                bitrate=metadata.get('bitrate'),
+                # Add OpenCV analysis results
+                faces_detected=opencv_metadata.get('faces_detected'),
+                dominant_colors=opencv_metadata.get('dominant_colors'),
+                average_color=opencv_metadata.get('average_color'),
+                is_blurry=opencv_metadata.get('is_blurry'),
+                brightness_score=opencv_metadata.get('brightness_score')
+            )
+            db.add(media_asset)
+            db.commit()
+            db.refresh(media_asset)
+            print("Database record created successfully")  # Debug log
+        except Exception as db_error:
+            print(f"Database error: {str(db_error)}")  # Debug log
+            raise
+        finally:
+            db.close()
+        
+        # Include OpenCV analysis in response
+        metadata.update(opencv_metadata)
         
         return {
             "filename": file_location.name,
@@ -309,6 +405,9 @@ async def upload_file(
         }
     
     except Exception as e:
+        print(f"Upload error: {str(e)}")  # Debug log
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")  # Full error traceback
         raise HTTPException(status_code=500, detail=str(e))
 
 class MetadataModel(BaseModel):
