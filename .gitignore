@@ -25,7 +25,7 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Python environment
+# Virtual Environment
 venv/
 
 # Other

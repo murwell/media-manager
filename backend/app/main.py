@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 app = FastAPI()
 
 # Database setup
-DATABASE_URL = "postgresql://myuser:mypassword@localhost:5432/mydatabase"
+DATABASE_URL = "postgresql://myuser:mypassword@db:5432/mydatabase"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
