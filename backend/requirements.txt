@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+python-multipart
+alembic
+python-magic
+pillow
+moviepy==1.0.3
+mutagen==1.47.0
+numpy
+decorator>=4.0.2
+opencv-python-headless 
