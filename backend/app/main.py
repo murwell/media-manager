@@ -22,11 +22,19 @@ from pydantic import BaseModel
 import cv2
 import numpy as np
 from .services.opencv_service import OpenCVService
+from dotenv import load_dotenv
+
+# Load environment variables at the very beginning
+load_dotenv()
+
+# Get DATABASE_URL with a default value
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is not set")
 
 app = FastAPI()
 
 # Database setup
-DATABASE_URL = "postgresql://myuser:mypassword@db:5432/mydatabase"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -78,6 +86,15 @@ class MediaAsset(Base):
     average_color = Column(String, nullable=True)  # Store as hex color
     is_blurry = Column(Boolean, nullable=True)
     brightness_score = Column(Float, nullable=True)
+    
+    # Video specific
+    fps = Column(Float, nullable=True)
+    total_frames = Column(Integer, nullable=True)
+    scene_changes = Column(Text, nullable=True)  # Store as JSON list of timestamps
+    shot_types = Column(Text, nullable=True)     # Store as JSON dict
+    camera_motion = Column(Text, nullable=True)  # Store as JSON dict
+    motion_score = Column(Float, nullable=True)
+    is_stable = Column(Boolean, nullable=True)
 
 # Create the database tables
 Base.metadata.create_all(bind=engine)
@@ -299,11 +316,14 @@ async def upload_file(
         
         print("File saved successfully")  # Debug log
         
-        # Extract OpenCV metadata for images
+        # Extract OpenCV metadata for images and videos
         opencv_metadata = {}
-        if file.content_type.startswith('image/'):
+        if file.content_type.startswith('image/') or file.content_type.startswith('video/'):
             print("Starting OpenCV analysis")  # Debug log
-            opencv_metadata = opencv_service.analyze_image(str(file_location))
+            if file.content_type.startswith('image/'):
+                opencv_metadata = opencv_service.analyze_image(str(file_location))
+            else:
+                opencv_metadata = opencv_service.analyze_video(str(file_location))
             print(f"OpenCV metadata: {opencv_metadata}")  # Debug log
         
         # Save file details to the database
@@ -328,7 +348,14 @@ async def upload_file(
                 dominant_colors=opencv_metadata.get('dominant_colors'),
                 average_color=opencv_metadata.get('average_color'),
                 is_blurry=opencv_metadata.get('is_blurry'),
-                brightness_score=opencv_metadata.get('brightness_score')
+                brightness_score=opencv_metadata.get('brightness_score'),
+                fps=opencv_metadata.get('fps'),
+                total_frames=opencv_metadata.get('total_frames'),
+                scene_changes=json.dumps(opencv_metadata.get('scene_changes', [])),
+                shot_types=json.dumps(opencv_metadata.get('shot_types', {})),
+                camera_motion=json.dumps(opencv_metadata.get('camera_motion', {})),
+                motion_score=opencv_metadata.get('motion_score'),
+                is_stable=opencv_metadata.get('is_stable', True)
             )
             db.add(media_asset)
             db.commit()
@@ -356,6 +383,21 @@ async def upload_file(
         import traceback
         print(f"Traceback: {traceback.format_exc()}")  # Full error traceback
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/upload/batch")
+async def upload_files(
+    files: List[UploadFile] = File(...),
+    title_prefix: str = None,
+):
+    results = []
+    for i, file in enumerate(files):
+        try:
+            title = f"{title_prefix}_{i+1}" if title_prefix else None
+            result = await upload_file(file, title)
+            results.append(result)
+        except Exception as e:
+            results.append({"error": str(e), "filename": file.filename})
+    return results
 
 class MetadataModel(BaseModel):
     width: Optional[int] = None
