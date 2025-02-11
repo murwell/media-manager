@@ -19,6 +19,8 @@ import json
 import re
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
+import cv2
+import numpy as np
 
 app = FastAPI()
 
@@ -452,6 +454,63 @@ async def get_file(file_id: int):
             }
         }
     
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+@app.get("/test-opencv/{file_id}")
+async def test_opencv(file_id: int):
+    """Test endpoint to verify OpenCV functionality."""
+    try:
+        db = SessionLocal()
+        asset = db.query(MediaAsset).filter(MediaAsset.id == file_id).first()
+        
+        if not asset:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        if not asset.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File is not an image")
+            
+        # Read image with OpenCV
+        image_path = asset.file_path
+        img = cv2.imread(image_path)
+        if img is None:
+            raise HTTPException(status_code=500, detail="Failed to read image")
+            
+        # Get basic image information
+        height, width = img.shape[:2]
+        
+        # Detect faces (as a test)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+        
+        # Get dominant colors
+        pixels = img.reshape(-1, 3)
+        pixels = np.float32(pixels)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 200, .1)
+        flags = cv2.KMEANS_RANDOM_CENTERS
+        _, labels, palette = cv2.kmeans(pixels, 5, None, criteria, 10, flags)
+        _, counts = np.unique(labels, return_counts=True)
+        
+        # Convert BGR to RGB and then to hex
+        dominant_colors = []
+        for color in palette:
+            rgb = color[::-1]  # Convert BGR to RGB
+            hex_color = '#{:02x}{:02x}{:02x}'.format(int(rgb[0]), int(rgb[1]), int(rgb[2]))
+            dominant_colors.append(hex_color)
+            
+        return {
+            "success": True,
+            "image_info": {
+                "width": width,
+                "height": height,
+                "faces_detected": len(faces),
+                "dominant_colors": dominant_colors
+            }
+        }
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
