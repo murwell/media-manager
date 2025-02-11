@@ -37,3 +37,58 @@ uploads/audio/*
 !uploads/audio/.gitkeep
 uploads/other/*
 !uploads/other/.gitkeep
+
+# Large file types
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+*.iso
+*.bin
+*.exe
+*.dll
+*.so
+*.dylib
+*.model
+*.weights
+*.h5
+*.ckpt
+*.pb
+*.onnx
+*.mlmodel
+*.caffemodel
+*.pth
+*.pt
+*.tflite
+
+# Media files (if not needed in repo)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.mp3
+*.wav
+*.flac
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.tiff
+*.psd
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+logs/
+log/
+
+# Cache directories
+.cache/
+cache/
+tmp/
+temp/
